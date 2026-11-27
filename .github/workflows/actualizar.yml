@@ -19,6 +19,7 @@ concurrency:
 jobs:
   actualizar:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - name: Comprobar hora
         id: hora
