@@ -42,7 +42,7 @@ jobs:
 
       - name: Leer wanafutbol y regenerar la app
         if: steps.hora.outputs.ok == 'true'
-        run: python actualizar.py
+        run: python -u actualizar.py
 
       - name: Guardar cambios
         if: steps.hora.outputs.ok == 'true'
