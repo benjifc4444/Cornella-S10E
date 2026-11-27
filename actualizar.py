@@ -7,6 +7,7 @@ Uso:   python actualizar.py            (descarga la web y reescribe index.html)
 Si algo no cuadra (la web cambia, faltan partidos, desaparecen resultados...)
 el script se detiene SIN tocar index.html y termina con error.
 """
+import socket
 import argparse, datetime, html, json, re, sys, time, unicodedata, urllib.error, urllib.request, urllib.robotparser
 
 URL = "https://wanafutbol.com/competicion/segona-divisio-benjami-s10/grup-9/calendario"
@@ -25,6 +26,9 @@ CLAVES = [("academia", "A"), ("torrassa", "T"), ("sant andreu", "S"), ("corts", 
           ("catalonia", "C"), ("martinenc", "M"), ("vallvidrera", "V"), ("pedraza", "D"),
           ("barceloneta", "B"), ("barcino", "N"), ("penya", "P"), ("sants", "P"), ("horta", "O"),
           ("hospitalet", "H"), ("cornella", "E")]
+
+
+socket.setdefaulttimeout(30)
 
 
 def fallo(msg):
@@ -51,20 +55,26 @@ def texto(fragmento):
 
 
 def descargar():
-    rp = urllib.robotparser.RobotFileParser("https://wanafutbol.com/robots.txt")
+    rp = urllib.robotparser.RobotFileParser()
     try:
-        rp.read()
+        req = urllib.request.Request("https://wanafutbol.com/robots.txt", headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            rp.parse(r.read().decode("utf-8", "replace").splitlines())
         if not rp.can_fetch(UA, URL):
             fallo("El robots.txt de wanafutbol.com no permite leer esta página de forma automática.")
-    except OSError:
-        pass
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            fallo(f"No se puede consultar el robots.txt de wanafutbol.com (HTTP {e.code}); no leo la web.")
+        print(f"robots.txt no disponible (HTTP {e.code}); sigo con una sola lectura.")
+    except Exception as e:  # noqa
+        print(f"robots.txt no disponible ({e!r}); sigo con una sola lectura.")
     # Reintenta con calma si la web responde con un fallo temporal (503, 429, 500...).
-    esperas = [20, 60, 120, 180]
+    esperas = [15, 45, 90]
     ultimo = None
     for intento in range(len(esperas) + 1):
         try:
             req = urllib.request.Request(URL, headers={"User-Agent": UA, "Accept-Language": "es"})
-            with urllib.request.urlopen(req, timeout=40) as r:
+            with urllib.request.urlopen(req, timeout=30) as r:
                 return r.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
             ultimo = f"HTTP {e.code} {e.reason}"
