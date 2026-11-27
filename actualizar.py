@@ -29,6 +29,7 @@ CLAVES = [("academia", "A"), ("torrassa", "T"), ("sant andreu", "S"), ("corts", 
 
 
 socket.setdefaulttimeout(30)
+sys.stdout.reconfigure(line_buffering=True)   # que el registro de GitHub muestre cada línea al momento
 
 
 def fallo(msg):
