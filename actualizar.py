@@ -7,7 +7,7 @@ Uso:   python actualizar.py            (descarga la web y reescribe index.html)
 Si algo no cuadra (la web cambia, faltan partidos, desaparecen resultados...)
 el script se detiene SIN tocar index.html y termina con error.
 """
-import argparse, datetime, html, json, re, sys, time, unicodedata, urllib.request, urllib.robotparser
+import argparse, datetime, html, json, re, sys, time, unicodedata, urllib.error, urllib.request, urllib.robotparser
 
 URL = "https://wanafutbol.com/competicion/segona-divisio-benjami-s10/grup-9/calendario"
 UA = "ActualizadorS10E/1.0 (uso personal, una peticion por semana)"
@@ -58,16 +58,33 @@ def descargar():
             fallo("El robots.txt de wanafutbol.com no permite leer esta página de forma automática.")
     except OSError:
         pass
+    # Reintenta con calma si la web responde con un fallo temporal (503, 429, 500...).
+    esperas = [20, 60, 120, 180]
     ultimo = None
-    for intento in range(3):
+    for intento in range(len(esperas) + 1):
         try:
             req = urllib.request.Request(URL, headers={"User-Agent": UA, "Accept-Language": "es"})
             with urllib.request.urlopen(req, timeout=40) as r:
                 return r.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            ultimo = f"HTTP {e.code} {e.reason}"
+            if e.code in (401, 403, 404, 410):
+                fallo(f"La web rechaza la petición ({ultimo}). Parece que no permite lecturas automáticas; no insisto.")
+            pausa = esperas[intento] if intento < len(esperas) else 0
+            ra = e.headers.get("Retry-After") if e.headers else None
+            if ra and ra.isdigit():
+                pausa = min(max(pausa, int(ra)), 300)
         except Exception as e:  # noqa
-            ultimo = e
-            time.sleep(5 * (intento + 1))
-    fallo(f"No se pudo descargar la web: {ultimo}")
+            ultimo = repr(e)
+            pausa = esperas[intento] if intento < len(esperas) else 0
+        print(f"Intento {intento + 1} fallido ({ultimo}).", end=" ")
+        if pausa:
+            print(f"Reintento en {pausa} s...")
+            time.sleep(pausa)
+        else:
+            print()
+    fallo(f"No se pudo descargar la web tras varios intentos (último error: {ultimo}). "
+          "Si se repite cada semana, la web bloquea las lecturas automáticas desde GitHub.")
 
 
 RE_TOKEN = re.compile(r"(<h[1-4]\b[^>]*>.*?</h[1-4]>)|(<a\b(?=[^>]*href=[\"'][^\"']*/partido/)[^>]*>.*?</a>)", re.S | re.I)
